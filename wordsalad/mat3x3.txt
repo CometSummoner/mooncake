@@ -412,7 +412,7 @@ struct Mat3x3 {
 		ToWorldRot(yaw, pitch, roll);
 		
 		// kd: Now prepare for projection (world to screen):
-		let tan_hor_fov = tan(hor_fov / 2);
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
 		let tan_ver_fov = tan_hor_fov / aspect_ratio;
 		
 		v /= -tan_hor_fov;	// kd: left becomes right with respect to aspect ratio and fov
@@ -432,7 +432,7 @@ struct Mat3x3 {
 		ToWorldRot(yaw, pitch, roll);
 		
 		// kd: Now prepare for de-projection (screen to world):
-		let tan_hor_fov = tan(hor_fov / 2);
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
 		let tan_ver_fov = tan_hor_fov / aspect_ratio;
 		
 		v *= -tan_hor_fov;
@@ -447,8 +447,12 @@ struct Mat3x3 {
 		return depth * (normal.x * v + normal.y * w + u);
 	}
 	
-	vector2 LinearWorldToScreen (vector3 diff, double depth) const {
+	vector2 LinearWorldToAbs (vector3 diff, double depth) const {
 		return (diff dot v, diff dot w) / depth;
+	}
+	
+	static vector2 CompScale2 (vector2 normal, vector2 size) {
+		return (normal.x * size.x, normal.y * size.y);
 	}
 	
 	double LinearDepth (vector3 diff) const {

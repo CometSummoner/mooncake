@@ -1,0 +1,45 @@
+/*
+
+kd: This implements a 3D projection which puts a text hat on a candle that spawns with you in the
+level. The text is on the 2D screen. It follows the actor in the 3D world.
+
+*/
+
+class ElProjector : EventHandler {
+	Actor target;
+	
+	override void WorldLoaded (WorldEvent event) {
+		let ref_mo			= players [0].mo;
+		target				= target.Spawn("Candlestick", ref_mo.pos);
+	}
+	
+	override void RenderOverlay (RenderEvent event) {
+		let t			= event.fractic;
+		let resolution	= (Screen.GetWidth(), Screen.GetHeight());
+		let aspect		= max(4.0 / 3, Screen.GetAspectRatio());
+		
+		Mat3x3 orientation;
+		orientation.ToLinearWorldToScreen(
+			event.viewangle,
+		-	event.viewpitch,
+		-	event.viewroll,
+			players [consoleplayer].fov,
+			aspect,
+			level.pixelstretch);
+		
+		let diff			= target.vec3offset(0, 0, target.height + 20) - event.viewpos;
+		let depth			= orientation.LinearDepth(diff);
+		
+		if(orientation.IsDepthInFront(depth)) {
+			let screen_pos = orientation.CompScale2(
+				(0.5, 0.5) + 0.5 * orientation.LinearWorldToAbs(diff, depth),
+				resolution) - (4, 4);
+			
+			Screen.DrawText(
+				confont, font.cr_sapphire, screen_pos.x, screen_pos.y, "^",
+				DTA_VIRTUALWIDTHF,			resolution.x,
+				DTA_VIRTUALHEIGHTF,			resolution.y,
+				DTA_KEEPRATIO,				true);
+		}
+	}
+}
