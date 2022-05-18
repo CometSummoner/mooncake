@@ -357,9 +357,12 @@ struct Mat3x3 {
 		// linear type of renderer.
 		
 		// kd: The matrix is pretty nice looking too.
-		u = (cos(yaw), sin(yaw), tan(pitch));
-		v = (-u.y, u.x, 0);
-		w = (0, 0, tan(hor_fov) / aspect_ratio);
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
+		let tan_ver_fov = tan_hor_fov / aspect_ratio;
+		
+		u = (cos(yaw), sin(yaw), -tan(pitch));
+		v = (u.y, -u.x, 0) / tan_hor_fov;
+		w = (-pixel_ratio / tan_ver_fov, 0, tan_ver_fov);
 	}
 	
 	void ToPlanarScreenToWorld (
@@ -368,39 +371,26 @@ struct Mat3x3 {
 		// kd: Planar is just plain z-difference and no roll as of yet. That's cuz any software
 		// renderer that isn't the one based on the old Carmack one is just a software-based
 		// linear type of renderer.
-		let tan_hor_fov = tan(hor_fov / 2);
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
 		let tan_ver_fov = tan_hor_fov / aspect_ratio;
 		
 		// kd: The matrix is pretty nice looking too.
 		u = (cos(yaw), sin(yaw), tan(pitch));
-		v = (-u.y, u.x, 0) / tan_hor_fov;
-		w = (0, 0, tan_ver_fov);
+		v = (u.y, -u.x, 0) * tan_hor_fov;
+		w = (0, 0, tan_ver_fov / pixel_ratio);
 	}
 	
 	double PlanarDepth (vector3 diff) const {
 		return u.xy dot diff.xy;
 	}
 	
-	vector2 PlanarWorldToScreen (vector3 diff, double depth, double pixel_ratio = 1.2) const {
-		diff.z += depth * u.z;
-		return (v.xy dot diff.xy, -pixel_ratio * diff.z / w.z);
+	vector2 PlanarWorldToAbs (vector3 diff, double depth, double pixel_ratio = 1.2) const {
+		return (v.xy dot diff.xy, (diff.z + depth * u.z) * w.x) / depth;
 	}
 	
-	/*vector3 ToPlanarScreenToWorld (
-	double yaw = 0, double pitch = 0,
-	double hor_fov = 90, double aspect_ratio = 1.3333333, double pixel_ratio = 1.2) {
-		let tan_hor_fov = tan(hor_fov / 2);
-		let tan_ver_fov = tan_hor_fov / aspect_ratio;
-		
-		// kd: The matrix is pretty nice looking too.
-		u = (cos(yaw), sin(yaw), tan(pitch));
-		v = (-u.y, u.x, 0) * tan_hor_fov;
-		w = (0, 0, tan_ver_fov / pixel_ratio);
-	}*/
-	
-	/*vector3 PlanarScreenToWorld (vector2 normal, double depth) const {
-		return depth * ((u.x, u.y, 0) + normal.x * v - (0, 0, w.z) - normal.y * w);
-	}*/
+	vector3 PlanarScreenToWorld (vector2 normal, double depth) const {
+		return depth * (u + normal.x * v - normal.y * w);
+	}
 	
 	// kd: Convert this matrix into a linear perspective projection matrix (world to screen).
 	void ToLinearWorldToScreen (
@@ -661,7 +651,7 @@ struct Mat3x3 {
 	}
 	
 	// kd: Some stuff related to matrix conditions you won't use unless you're
-	// cracked and love numerics, probably!
+	// cracked and have a raging hard on for iterative methods I won't detail.
 	double RowSumNorm () const {
 		return max(max(
 			abs(u.x) + abs(v.x) + abs(w.x),
@@ -688,6 +678,13 @@ struct Mat3x3 {
 			min(min(min(u.x, u.y), u.z),
 			    min(min(v.x, v.y), v.z),
 			    min(min(w.x, w.y), w.z));
+	}
+	
+	double FrobeniusNorm2 () const {
+		let x = (u.x, v.x, w.x);
+		let y = (u.y, v.y, w.y);
+		let z = (u.z, v.z, w.z);
+		return x dot u + y dot v + z dot w;
 	}
 	
 	// kd: Mirror entries along the diagonal.

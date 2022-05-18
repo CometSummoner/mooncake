@@ -5,40 +5,93 @@ level. The text is on the 2D screen. It follows the actor in the 3D world.
 
 */
 
+struct MultiProjector {
+	MultiProjectorDraw draw_func;
+	
+	/*
+	
+	void Worldtick () {
+		draw_func.ModifyPos(draw_func.count);
+	}
+	
+	ui void RenderOverlay (RenderEvent event) const {
+		draw_func
+	}*/
+}
+
+class MultiProjectorDraw {
+	const max_count = 64;
+	vector3 [max_count]		pos_to_project;
+	vector2	[max_count]		screen_pos;
+	Actor [max_count]		actors_to_project;
+	ui ProjectionInfo projection;
+	int count;
+	
+	virtual ui void RenderOverlay (int count) const {}
+	virtual void Pos (int count) {}
+}
+
+class MultiHat : MultiProjectorDraw {
+	override void Pos (int count) {
+		for(let ii = 0; ii < count; ii++) {
+			let mo = actors_to_project [ii];
+			pos_to_project [ii] = mo.vec3offset(0, 0, mo.height + 10);
+		}
+	}
+	
+	override void RenderOverlay (int count) {
+		for(let ii = 0; ii < count; ii++) {
+			let pos = screen_pos [ii];
+			
+			Screen.DrawText(
+				confont, font.cr_sapphire, pos.x, pos.y, "^",
+				DTA_VIRTUALWIDTHF,			projection.resolution.x,
+				DTA_VIRTUALHEIGHTF,			projection.resolution.y,
+				DTA_KEEPRATIO,				true);
+		}
+	}
+}
+
 class ElProjector : EventHandler {
 	Actor target;
+	ui ProjectionInfo projection;
+	play ProjectionInfo deprojection;
+	ui ViewportInfo viewport;
 	
 	override void WorldLoaded (WorldEvent event) {
 		let ref_mo			= players [0].mo;
 		target				= target.Spawn("Candlestick", ref_mo.pos);
 	}
 	
+	override void WorldTick () {
+		PlayerInfo pi = players [consoleplayer];
+		
+		double x [] = { 0, 0.5, 1, 0, 0.5, 1, 0, 0.5, 1 };
+		double y [] = { 0, 0, 0, 0.5, 0.5, 0.5, 1, 1, 1 };
+		
+		deprojection.render_mode = deprojection.planar;
+		deprojection.ForPlayerDeproject(pi);
+		
+		for(let ii = 0; ii < x.size(); ii++) {
+			let pos = deprojection.DeprojectAbs((x [ii], y [ii]), 200);
+			Actor.Spawn("BulletPuff", pos);
+		}
+	}
+	
 	override void RenderOverlay (RenderEvent event) {
-		let t			= event.fractic;
-		let resolution	= (Screen.GetWidth(), Screen.GetHeight());
-		let aspect		= max(4.0 / 3, Screen.GetAspectRatio());
+		viewport.FromHud();
 		
-		Mat3x3 orientation;
-		orientation.ToLinearWorldToScreen(
-			event.viewangle,
-		-	event.viewpitch,
-		-	event.viewroll,
-			players [consoleplayer].fov,
-			aspect,
-			level.pixelstretch);
+		projection.render_mode = projection.planar;
+		projection.ForRenderEvent(event);
+		projection.Project(target.vec3offset(0, 0, target.height + 20));
 		
-		let diff			= target.vec3offset(0, 0, target.height + 20) - event.viewpos;
-		let depth			= orientation.LinearDepth(diff);
-		
-		if(orientation.IsDepthInFront(depth)) {
-			let screen_pos = orientation.CompScale2(
-				(0.5, 0.5) + 0.5 * orientation.LinearWorldToAbs(diff, depth),
-				resolution) - (4, 4);
+		if(projection.IsInFront()) {
+			let screen_pos = projection.ScreenPos();
 			
 			Screen.DrawText(
 				confont, font.cr_sapphire, screen_pos.x, screen_pos.y, "^",
-				DTA_VIRTUALWIDTHF,			resolution.x,
-				DTA_VIRTUALHEIGHTF,			resolution.y,
+				DTA_VIRTUALWIDTHF,			projection.resolution.x,
+				DTA_VIRTUALHEIGHTF,			projection.resolution.y,
 				DTA_KEEPRATIO,				true);
 		}
 	}
