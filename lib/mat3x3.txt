@@ -1,0 +1,783 @@
+/*
+
+kd: A matrix of 9 entries! That is 3x3 vectors in this case lel
+It helps you do a lot of things actually. Go take a look.
+
+*/
+
+struct Mat3x3 {
+	vector3 u;	// First column
+	vector3 v;	// second column
+	vector3 w;	// third column
+	
+	// kd: Set the 3 vectors as the columns.
+	void ToCols (vector3 a, vector3 b, vector3 c) {
+		u = a;
+		v = b;
+		w = c;
+	}
+	
+	// kd: Set the 3 vectors passed in as the rows.
+	void ToRows (vector3 a, vector3 b, vector3 c) {
+		u = (a.x, b.x, c.x);
+		v = (a.y, b.y, c.y);
+		w = (a.z, b.z, c.z);
+	}
+	
+	// kd: Set this matrix's values to another's.
+	void Copy (Mat3x3 other) {
+		u = other.u;
+		v = other.v;
+		w = other.w;
+	}
+	
+	// kd: Make this the identity (multiplying by the identity will not change matrices or vectors).
+	void ToId () {
+		u = (1, 0, 0);
+		v = (0, 1, 0);
+		w = (0, 0, 1);
+	}
+	
+	// kd: Make this the additive identity / the 0-matrix (any matrix or vector multiplied by this
+	// will be the 0-matrix or 0-vector respectively).
+	void To0 () {
+		u = (0, 0, 0);
+		v = (0, 0, 0);
+		w = (0, 0, 0);
+	}
+	
+	// kd: Make everything 0, but the diagonal entries will be the vector passed in. You could also
+	// say "make a primitive scaling matrix" or something idk.
+	void ToDiag (vector3 diag) {
+		u = (diag.x, 0, 0);
+		v = (0, diag.y, 0);
+		w = (0, 0, diag.z);
+	}
+	
+	// kd: Scale the first column by the first entry in f, etc.
+	void ScaleCols (vector3 f) {
+		u *= f.x;
+		v *= f.y;
+		w *= f.z;
+	}
+	
+	// kd: Same for rows.
+	void ScaleRows (vector3 f) {
+		let fx = f.x;
+		let fy = f.y;
+		let fz = f.z;
+		u = (fx * u.x, fx * u.y, fx * u.z);
+		v = (fy * v.x, fy * v.y, fy * v.z);
+		w = (fz * w.x, fz * w.y, fz * w.z);
+	}
+	
+	// kd: Yaawwwwwnnn it's getting late and I'm not really feeling like commenting things that are
+	// obvious anymore.
+	void ReplaceDiag (vector3 new_diag) {
+		u.x = new_diag.x;
+		u.y = new_diag.y;
+		u.z = new_diag.z;
+	}
+	
+	// kd: You can read.
+	void Fill (double f) {
+		u = (f, f, f);
+		v = (f, f, f);
+		w = (f, f, f);
+	}
+	
+	// kd: aight I think you're on your own now, or I'll never get to sleep lelelelel
+	void FillFrandom (double low = -1, double high = 1) {
+		u = (Frandom(low, high), Frandom(low, high), Frandom(low, high));
+		v = (Frandom(low, high), Frandom(low, high), Frandom(low, high));
+		w = (Frandom(low, high), Frandom(low, high), Frandom(low, high));
+	}
+	
+	bool Is0      () const { return (0, 0, 0)  == u && (0, 0, 0)  == v && (0, 0, 0)  == w; }
+	bool IsNear0  () const { return (0, 0, 0) ~== u && (0, 0, 0) ~== v && (0, 0, 0) ~== w; }
+	bool IsId     () const { return (1, 0, 0)  == u && (0, 1, 0)  == v && (0, 0, 1)  == w; }
+	bool IsNearId () const { return (1, 0, 0) ~== u && (0, 1, 0) ~== v && (0, 0, 1) ~== w; }
+	bool IsEqual     (Mat3x3 other) const { return u  == other.u && v  == other.v && w  == other.w; }
+	bool IsNearEqual (Mat3x3 other) const { return u ~== other.u && v ~== other.v && w ~== other.w; }
+	
+	vector3 Xyz (vector3 coords) const {
+		return
+			coords.x * u +
+			coords.y * v +
+			coords.z * w;
+	}
+	
+	vector3 BoxXyz (vector3 box_coords, vector3 box_alignment = (0.5, 0.5, 0.5), vector3 box_size = (1, 1, 1)) const {
+		return
+			(box_coords.x - box_alignment.x) * box_size.x * u +
+			(box_coords.y - box_alignment.y) * box_size.y * v +
+			(box_coords.z - box_alignment.z) * box_size.z * w;
+	}
+	
+	vector3 LocalPos (vector3 world_pos) const {
+		return (world_pos dot u, world_pos dot v, world_pos dot w);
+	}
+	
+	vector3 LocalWorldSphere (double ang = 0, double vang = 0) const {
+		return cos(vang) * (cos(ang) * u + sin(ang) * v) + sin(vang) * w;
+	}
+	
+	vector3 LocalViewSphere (double ang = 0, double vang = 0) const {
+		return cos(vang) * (cos(ang) * u + sin(ang) * v) - sin(vang) * w;
+	}
+	
+	vector3 Orbit (double ang) const {
+		return cos(ang) * u + sin(ang) * v;
+	}
+	
+	// kd: (wakes up again) oh are we doing useful things now
+	// this makes a rotation matrix. u is forward. v is left. w is up.
+	// the 3 vectors are orthonormal - that means each has length 1 and
+	// they are pairwise orthogonal (have dot product 0, are perpendicular).
+	void ToWorldRotNoRoll (double yaw = 0, double pitch = 0) {
+		let cosang			= cos(yaw);
+		let sinang			= sin(yaw);
+		let cosvang			= cos(pitch);
+		let sinvang			= sin(pitch);
+		
+		u = (
+			cosvang * cosang,
+			cosvang * sinang,
+			sinvang);
+		
+		v = (
+			-sinang,
+			 cosang,
+			 0);
+		
+		w = (
+			-sinvang * cosang,
+			-sinvang * sinang,
+			 cosvang);
+	}
+	
+	// kd: same but it takes roll into account. this allows making a matrix
+	// representation of gzd camera view if you're into that (in other words
+	// it can do screen projections).
+	void ToWorldRot (double yaw = 0, double pitch = 0, double roll = 0) {
+		let cosang			= cos(yaw);
+		let sinang			= sin(yaw);
+		let cosvang			= cos(pitch);
+		let sinvang			= sin(pitch);
+		let cosrang			= cos(roll);
+		let sinrang			= sin(roll);
+		
+		u = (
+			cosvang * cosang,
+			cosvang * sinang,
+			sinvang);
+		
+		let left_no_roll = (
+			-sinang,
+			 cosang,
+			 0);
+		
+		let up_no_roll = (
+			-sinvang * cosang,
+			-sinvang * sinang,
+			 cosvang);
+		
+		v = cosrang * left_no_roll - sinrang * up_no_roll;
+		w = cosrang * up_no_roll + sinrang * left_no_roll;
+	}
+	
+	// kd: Aliases to make your life a bit easier sometimes...
+	void ToViewRot (double yaw = 0, double pitch = 0, double roll = 0) {
+		ToWorldRot(yaw, -pitch, -roll);
+	}
+	
+	void ToViewRotNoRoll (double yaw = 0, double pitch = 0) {
+		ToWorldRotNoRoll(yaw, -pitch);
+	}
+	
+	void ToOrbit (double yaw = 0, double pitch = 0, double roll = 0) {
+		ToWorldRot(yaw, pitch, roll);
+	}
+	
+	// kd: Rotation quaternion to rotation matrix conversion. For quaternion-vector
+	// conjugation, this would mean that if M is the rotation matrix from q, and v is
+	// some vector, then Mv is equal to q^-1 * (0, v) * q... which is effectively
+	// v rotated by q! Yea.
+	void ToRotFromQuat (Quat r) {
+		let q = r.q;
+		let x = r.u.x;
+		let y = r.u.y;
+		let z = r.u.z;
+		
+		let qq = q * q / 2;
+		let xx = x * x / 2;
+		let yy = y * y / 2;
+		let zz = z * z / 2;
+		
+		/*
+		
+		u.x = 1 + xx - yy - zz;
+		v.y = 1 - xx + yy - zz;
+		w.z = 1 - xx - yy + zz;
+		
+		u.y = 2 * (x * z - q * y);
+		u.z = 2 * (x * y + q * z);
+		v.z = 2 * (x * y - q * z);
+		
+		v.x = 2 * (y * z + q * x);
+		w.x = 2 * (y * z - q * x);
+		w.y = 2 * (x * z + q * y);
+		
+		*/
+		
+		u = 2 * (
+			0.5 + xx - yy - zz,
+			x * y + q * z,
+			x * z - q * y);
+		
+		v = 2 * (
+			y * x - q * z,
+			0.5 - xx + yy - zz,
+			z * y + q * x);
+		
+		w = 2 * (
+			x * z + q * y,
+			y * z - q * x,
+			0.5 - xx - yy + zz);
+	}
+	
+	void UnitAxisToWorldRot (vector3 a, double ang = 0) const {
+		/*
+		
+		rotation formula around an axis:
+		
+		  cos(ang) * (v - <v, a> a)
+		+ sin(ang) * cross(v, a)
+		+ <v, a> a
+		
+		this rotates v around a by ang
+		
+		*/
+		
+		Mat3x3 cross_elem;
+		cross_elem.ToLeftCrossProduct(a);
+		
+		let cosang = cos(ang);
+		let sinang = sin(ang);
+		
+		let axa = a.x * a;
+		let aya = a.y * a;
+		let aza = a.z * a;
+		
+		u = cosang * ((1, 0, 0) - axa) + sinang * cross_elem.u + axa;
+		v = cosang * ((0, 1, 0) - aya) + sinang * cross_elem.v + aya;
+		w = cosang * ((0, 0, 1) - aza) + sinang * cross_elem.w + aza;
+	}
+	
+	// kd: If you used the above functions to make this a rotation matrix, these
+	// will be more descriptive aliases to the variables u v and w.
+	vector3 Forward	() const { return u; }
+	vector3 Left	() const { return v; }
+	vector3 Up		() const { return w; }
+	vector3 Back	() const { return -u; }
+	vector3 Right	() const { return -v; }
+	vector3 Down	() const { return -w; }
+	
+	void ScaleForward	(double f = 1) { u *= f; }
+	void ScaleLeft		(double f = 1) { v *= f; }
+	void ScaleUp		(double f = 1) { w *= f; }
+	void ScaleBack		(double f = 1) { u *= f; }
+	void ScaleRight		(double f = 1) { v *= f; }
+	void ScaleDown		(double f = 1) { w *= f; }
+	
+	// kd: Assumes that this is a rotation matrix, like the ones that would be
+	// output by ToWorldRot, this will return possible source angle values from
+	// which the rotation was formed!
+	double, double, double WorldAnglesFromRot () const {
+		let sinvang = u.z;
+		
+		if(abs(sinvang) < 0.999) {
+			return
+				VectorAngle(u.x, u.y),
+				asin(sinvang),
+				VectorAngle(w.z, v.z);
+		}
+		
+		// kd: Roll and yaw coincide at these extreme pitch values of 90° and -90°.
+		// You can also find great success setting yaw = 0 and roll
+		// = VectorAngle(wz, v.z) as usual.
+		else if(0 < sinvang) {
+			return
+				VectorAngle(v.x, v.y) - 90,
+				90,
+				0;
+		}
+		
+		return
+			VectorAngle(v.x, v.y) - 90,
+			-90,
+			0;
+	}
+	
+	// kd: Do the same but do the pitch and roll inversion that the player view does.
+	double, double, double ViewAnglesFromRot () const {
+		double ang, vang, rang;
+		[ang, vang, rang] = WorldAnglesFromRot();
+		return ang, -vang, -rang;
+	}
+	
+	// kd: todooooooooo
+	/*vector3, double AxisFromRot () const {
+		
+	}*/
+	
+	// kd: If M is your matrix, and v is the vector you pass in, then for a
+	// vector u, M.VecMul(u) will be equivalent to v cross u.
+	void ToCrossProduct (vector3 v) {
+		u = (0,     v.z, -v.y);
+		v = (-v.z,  0,    v.x);
+		w = ( v.y, -v.x,  0);
+	}
+	
+	// kd: And here, M.VecMul(u) will be equivalent to u cross v, which is
+	// really just -(v cross u).
+	void ToLeftCrossProduct (vector3 v) {
+		u = (0,    -v.z,  v.y);
+		v = ( v.z,  0,   -v.x);
+		w = (-v.y,  v.x,  0);
+	}
+	
+	// kd: Some projection related functions! I'm so nice, I help you build screen projections!
+	// (Linear perspective as in open-gl stuff.)
+	void ToPlanarWorldToScreen (
+	double yaw = 0, double pitch = 0,
+	double hor_fov = 90, double aspect_ratio = 1.3333333, double pixel_ratio = 1.2) {
+		// kd: Planar is just plain z-difference and no roll as of yet. That's cuz any software
+		// renderer that isn't the one based on the old Carmack one is just a software-based
+		// linear type of renderer.
+		
+		// kd: The matrix is pretty nice looking too.
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
+		let tan_ver_fov = tan_hor_fov / aspect_ratio;
+		
+		u = (cos(yaw), sin(yaw), -tan(pitch));
+		v = (u.y, -u.x, 0) / tan_hor_fov;
+		w = (-pixel_ratio / tan_ver_fov, 0, tan_ver_fov);
+	}
+	
+	void ToPlanarScreenToWorld (
+	double yaw = 0, double pitch = 0,
+	double hor_fov = 90, double aspect_ratio = 1.3333333, double pixel_ratio = 1.2) {
+		// kd: Planar is just plain z-difference and no roll as of yet. That's cuz any software
+		// renderer that isn't the one based on the old Carmack one is just a software-based
+		// linear type of renderer.
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
+		let tan_ver_fov = tan_hor_fov / aspect_ratio;
+		
+		// kd: The matrix is pretty nice looking too.
+		u = (cos(yaw), sin(yaw), tan(pitch));
+		v = (u.y, -u.x, 0) * tan_hor_fov;
+		w = (0, 0, tan_ver_fov / pixel_ratio);
+	}
+	
+	double PlanarDepth (vector3 diff) const {
+		return u.xy dot diff.xy;
+	}
+	
+	vector2 PlanarWorldToAbs (vector3 diff, double depth, double pixel_ratio = 1.2) const {
+		return (v.xy dot diff.xy, (diff.z + depth * u.z) * w.x) / depth;
+	}
+	
+	vector3 PlanarScreenToWorld (vector2 normal, double depth) const {
+		return depth * (u + normal.x * v - normal.y * w);
+	}
+	
+	// kd: Convert this matrix into a linear perspective projection matrix (world to screen).
+	void ToLinearWorldToScreen (
+	double yaw = 0, double pitch = 0, double roll = 0,
+	double hor_fov = 90, double aspect_ratio = 1.3333333, double pixel_ratio = 1.2) {
+		// kd: gzd compensates for pixel ratio in the view pitch. That's cuz gzd doesn't want you to
+		// experience pixel stretching when you look right at the floor or the ceiling.
+		pitch = VectorAngle(cos(pitch), pixel_ratio * sin(pitch));
+		ToWorldRot(yaw, pitch, roll);
+		
+		// kd: Now prepare for projection (world to screen):
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
+		let tan_ver_fov = tan_hor_fov / aspect_ratio;
+		
+		v /= -tan_hor_fov;	// kd: left becomes right with respect to aspect ratio and fov
+		w /= -tan_ver_fov;	// and up becomes down with respect to aspect ratio and fov
+		
+		u.z *= pixel_ratio;
+		v.z *= pixel_ratio;
+		w.z *= pixel_ratio;
+	}
+	
+	// kd: And convert this matrix into a linear de-projection perspective matrix (screen to world):
+	void ToLinearScreenToWorld (
+	double yaw = 0, double pitch = 0, double roll = 0,
+	double hor_fov = 90, double aspect_ratio = 1.3333333, double pixel_ratio = 1.2) {
+		// kd: Same deal with compensation:
+		pitch = VectorAngle(cos(pitch), pixel_ratio * sin(pitch));
+		ToWorldRot(yaw, pitch, roll);
+		
+		// kd: Now prepare for de-projection (screen to world):
+		let tan_hor_fov = tan(hor_fov / 2) * aspect_ratio * 3.0 / 4;
+		let tan_ver_fov = tan_hor_fov / aspect_ratio;
+		
+		v *= -tan_hor_fov;
+		w *= -tan_ver_fov;
+		
+		u.z /= pixel_ratio;
+		v.z /= pixel_ratio;
+		w.z /= pixel_ratio;
+	}
+	
+	vector3 LinearScreenToWorld (vector2 normal, double depth = 1) const {
+		return depth * (normal.x * v + normal.y * w + u);
+	}
+	
+	vector2 LinearWorldToAbs (vector3 diff, double depth) const {
+		return (diff dot v, diff dot w) / depth;
+	}
+	
+	static vector2 CompScale2 (vector2 normal, vector2 size) {
+		return (normal.x * size.x, normal.y * size.y);
+	}
+	
+	double LinearDepth (vector3 diff) const {
+		return diff dot u;
+	}
+	
+	static bool IsDepthInFront (double depth, double min_depth = 0) {
+		return min_depth < depth;
+	}
+	
+	// kd: This allows passing some unit vectors in. You can then use the matrix to perform a sort
+	// of relative rotation. Imagine a bomb chu from Zelda, Ocarina of Time! (I'm gonna explain it
+	// all down below so don't worry lel)
+	void ToRelativeRotation (vector3 from_unit, vector3 to_unit) {
+		u		= from_unit cross to_unit;
+		v		= (0, u dot u, 0);
+		w		= (sqrt(1 - v.y), 0, 0);
+		v.x		= sqrt(v.y);
+		
+		// Imagine you're coding the bomb chu. The bomb chu can cling to surfaces, and it will trace
+		// them! So they can climb inclines, slopes, walls, and retain their speed while doing so.
+		// For example, if you detect the bomb chu will go from a floor to a wall, you take the
+		// floor normal and the wall normal (the vectors perpendicular to their surface plane) and
+		// set the floor normal as "from_unit" and the wall normal as the "to_unit".
+	}
+	
+	// kd: Then you use ApplyRelativeRotation on the velocity!
+	vector3 ApplyRelativeRotation (vector3 x) const {
+		let x_dot_u = x dot u;
+		return
+			v.x * (x - x_dot_u * u) +
+			w.x * u cross x +
+			x_dot_u * u;
+	}
+	
+	void Scale (double f) {
+		u *= f;
+		v *= f;
+		w *= f;
+	}
+	
+	void ScaleRowX (double f) {
+		u.x *= f;
+		v.x *= f;
+		w.x *= f;
+	}
+	
+	void ScaleRowY (double f) {
+		u.y *= f;
+		v.y *= f;
+		w.y *= f;
+	}
+	
+	void ScaleRowZ (double f) {
+		u.z *= f;
+		v.z *= f;
+		w.z *= f;
+	}
+	
+	void Add (Mat3x3 rhs) {
+		u += rhs.u;
+		v += rhs.v;
+		w += rhs.w;
+	}
+	
+	void Sub (Mat3x3 rhs) {
+		u -= rhs.u;
+		v -= rhs.v;
+		w -= rhs.w;
+	}
+	
+	void Negate () {
+		u = -u;
+		v = -v;
+		w = -w;
+	}
+	
+	void AbsAll () {
+		u = (abs(u.x), abs(u.y), abs(u.z));
+		v = (abs(v.x), abs(v.y), abs(v.z));
+		w = (abs(w.x), abs(w.y), abs(w.z));
+	}
+	
+	vector3 LeftVecMul (vector3 lhs) const {
+		return (lhs dot u, lhs dot v, lhs dot w);
+	}
+	
+	vector3 VecMul (vector3 rhs) const {
+		return (
+			(u.x, v.x, w.x) dot rhs,
+			(u.y, v.y, w.y) dot rhs,
+			(u.z, v.z, w.z) dot rhs);
+	}
+	
+	vector3 SymVecMul (vector3 rhs) const {
+		return (rhs dot u, rhs dot v, rhs dot w);
+	}
+	
+	vector3 LeftSymVecMul (vector3 lhs) const {
+		return (lhs dot u, lhs dot v, lhs dot w);
+	}
+	
+	void Mul (Mat3x3 rhs) {
+		let x_row = (u.x, v.x, w.x);
+		let y_row = (u.y, v.y, w.y);
+		let z_row = (u.z, v.z, w.z);
+		let rhs_u = rhs.u;
+		let rhs_v = rhs.v;
+		let rhs_w = rhs.w;
+		
+		u = (x_row dot rhs_u, x_row dot rhs_v, x_row dot rhs_w);
+		v = (y_row dot rhs_u, y_row dot rhs_v, y_row dot rhs_w);
+		w = (z_row dot rhs_u, z_row dot rhs_v, z_row dot rhs_w);
+	}
+	
+	void MulLeft (Mat3x3 lhs) {
+		let lhs_u = lhs.u;
+		let lhs_v = lhs.v;
+		let lhs_w = lhs.w;
+		let x_row = (lhs_u.x, lhs_v.x, lhs_w.x);
+		let y_row = (lhs_u.y, lhs_v.y, lhs_w.y);
+		let z_row = (lhs_u.z, lhs_v.z, lhs_w.z);
+		let this_u = u;
+		let this_v = v;
+		let this_w = w;
+		
+		u = (x_row dot this_u, x_row dot this_v, x_row dot this_w);
+		v = (y_row dot this_u, y_row dot this_v, y_row dot this_w);
+		w = (z_row dot this_u, z_row dot this_v, z_row dot this_w);
+	}
+	
+	// kd: Use this multiplication if you know the matrix is orthogonal. That is the
+	// case if and only if it is a rotation (as given above), a reflection, or a
+	// product of them!
+	void OrthoMul (Mat3x3 rhs) {
+		let u_temp = u;
+		let v_temp = v;
+		let w_temp = w;
+		let ru = rhs.u;
+		let rv = rhs.v;
+		let rw = rhs.w;
+		
+		u = (
+			u_temp dot ru,
+			v_temp dot ru,
+			w_temp dot ru);
+		v = (
+			u_temp dot rv,
+			v_temp dot rv,
+			w_temp dot rv);
+		w = (
+			u_temp dot rw,
+			v_temp dot rw,
+			w_temp dot rw);
+	}
+	
+	void LeftOrthoMul (Mat3x3 lhs) {
+		let u_temp = u;
+		let v_temp = v;
+		let w_temp = w;
+		let ru = lhs.u;
+		let rv = lhs.v;
+		let rw = lhs.w;
+		let x = (ru.x, rv.x, rv.z);
+		let y = (ru.y, rv.y, rv.y);
+		let z = (ru.z, rv.z, rv.z);
+		
+		u = (
+			x dot u_temp,
+			x dot v_temp,
+			x dot w_temp);
+		v = (
+			y dot u_temp,
+			y dot v_temp,
+			y dot w_temp);
+		w = (
+			z dot u_temp,
+			z dot v_temp,
+			z dot w_temp);
+	}
+	
+	
+	// kd: Or just use this which is an alias with a more descriptive name for
+	// the situation basically.
+	void RotateBy (Mat3x3 rot) { OrthoMul(rot); }
+	void UnrotateBy (Mat3x3 rot) { LeftOrthoMul(rot); }
+	
+	// kd: The matrix determinant is going to be 1 for rotations and either
+	// 1 or -1 for orthogonal matrices.
+	double Det () const {
+		return u dot (v cross w);
+	}
+	
+	// kd: Diagonal sum.
+	double Trace () const {
+		return u.x + v.y * w.z;
+	}
+	
+	// Columns and rows.
+	vector3, vector3, vector3 Cols () const { return u, v, w; }
+	vector3, vector3, vector3 Rows () const {
+		return
+			(u.x, v.x, w.x),
+			(u.y, v.y, w.y),
+			(u.z, v.z, w.z);
+	}
+	
+	// kd: Some stuff related to matrix conditions you won't use unless you're
+	// cracked and have a raging hard on for iterative methods I won't detail.
+	double RowSumNorm () const {
+		return max(max(
+			abs(u.x) + abs(v.x) + abs(w.x),
+			abs(u.y) + abs(v.y) + abs(w.y)),
+			abs(u.z) + abs(v.z) + abs(w.z));
+	}
+	
+	double ColSumNorm () const {
+		return max(max(
+			abs(u.x) + abs(u.y) + abs(u.z),
+			abs(v.x) + abs(v.y) + abs(v.z)),
+			abs(w.x) + abs(w.y) + abs(w.z));
+	}
+	
+	double MaxElem () const {
+		return
+			max(max(max(u.x, u.y), u.z),
+			    max(max(v.x, v.y), v.z),
+			    max(max(w.x, w.y), w.z));
+	}
+	
+	double MinElem () const {
+		return
+			min(min(min(u.x, u.y), u.z),
+			    min(min(v.x, v.y), v.z),
+			    min(min(w.x, w.y), w.z));
+	}
+	
+	double FrobeniusNorm2 () const {
+		let x = (u.x, v.x, w.x);
+		let y = (u.y, v.y, w.y);
+		let z = (u.z, v.z, w.z);
+		return x dot u + y dot v + z dot w;
+	}
+	
+	// kd: Mirror entries along the diagonal.
+	void Transpose () {
+		let temp = u.y;
+		u.y = v.x;
+		v.x = temp;
+		
+		temp = u.z;
+		u.z = w.x;
+		w.x = temp;
+		
+		temp = v.z;
+		v.z = w.y;
+		w.y = temp;
+	}
+	
+	bool IsSymmetric () const {
+		return u.y == v.x && u.z == w.x && v.z == w.y;
+	}
+	
+	// kd: Linearly interpolate between this matrix and another and store the result
+	// in this matrix. f = 0.5 gives the arithmetic mean of all entries.
+	void Lerp (Mat3x3 other, double f = 0.5) {
+		let other_f = 1.0 - f;
+		u = f * other.u + other_f * u;
+		v = f * other.v + other_f * v;
+		w = f * other.w + other_f * w;
+	}
+	
+	// kd: Kinda like lerp but smoother cuz it uses cos. Geddit? cos it uses cos.
+	void Trerp (Mat3x3 other, double f = 0.5) {
+		let f_cos = 0.5 * (1 - cos(180.0 * f));
+		let other_f = 1.0 - f_cos;
+		u = f_cos * other.u + other_f * u;
+		v = f_cos * other.v + other_f * v;
+		w = f_cos * other.w + other_f * w;
+	}
+	
+	// kd: The following are all convenience for the sake of description or
+	// just being able to index the rows and columns cuz idk maybe someone
+	// gets off on it.
+	void SetColX (vector3 vec) { u = vec; }
+	void SetColY (vector3 vec) { v = vec; }
+	void SetColZ (vector3 vec) { w = vec; }
+	
+	vector3 Col (int ii) const {
+		switch(ii) {
+		case 0: return u;
+		case 1: return v;
+		case 2: return w;
+		}
+		
+		return (0, 0, 0);
+	}
+	
+	void SetCol (int ii, vector3 vec) {
+		switch(ii) {
+		case 0: u = vec; break;
+		case 1: v = vec; break;
+		case 2: w = vec; break;
+		}
+	}
+	
+	void SetRowX (vector3 vec) { u.x = vec.x; v.x = vec.y; w.x = vec.z; }
+	void SetRowY (vector3 vec) { u.y = vec.x; v.y = vec.y; w.y = vec.z; }
+	void SetRowZ (vector3 vec) { u.z = vec.x; v.z = vec.y; w.z = vec.z; }
+	
+	vector3 Row (int ii) const {
+		switch(ii) {
+		case 0: return (u.x, v.x, w.x);
+		case 1: return (u.y, v.y, w.y);
+		case 2: return (u.z, v.z, w.z);
+		}
+		
+		return (0, 0, 0);
+	}
+	
+	void SetRow (int ii, vector3 vec) {
+		switch(ii) {
+		case 0: u.x = vec.x; v.x = vec.y; w.x = vec.z; break;
+		case 1: u.y = vec.x; v.y = vec.y; w.y = vec.z; break;
+		case 2: u.z = vec.x; v.z = vec.y; w.z = vec.z; break;
+		}
+	}
+	
+	string ToString () const {
+		return String.Format(
+			"%02.2f %02.2f %02.2f\n"
+			"%02.2f %02.2f %02.2f\n"
+			"%02.2f %02.2f %02.2f\n",
+			u.x, v.x, w.x,
+			u.y, v.y, w.y,
+			u.z, v.z, w.z);
+	}
+}
